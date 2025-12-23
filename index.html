@@ -3,393 +3,483 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Pro Eye-Aim Platform | Universal</title>
+    <title>Neural Aim Pro | Professional Eye Trainer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg-dark: #020617;
+            --cyan-glow: #00d4ff;
+            --red-glow: #ff3232;
+        }
+
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background-color: #050b14;
+            background-color: var(--bg-dark);
             color: white;
             font-family: 'Rajdhani', sans-serif;
-            background-image: radial-gradient(circle at center, #0a192f 0%, #050b14 100%);
-            touch-action: none; /* Предотвращает системные жесты во время игры */
+            background-image: radial-gradient(circle at 50% 50%, #0f172a 0%, #020617 100%);
+            touch-action: none;
+            transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        /* Адаптивное окно трекинга */
-        #webgazerVideoContainer {
-            top: 10px !important;
-            left: 10px !important;
-            width: 140px !important; /* Меньше по умолчанию */
-            height: 105px !important;
-            border: 2px solid #00d4ff !important;
-            border-radius: 8px !important;
-            box-shadow: 0 0 15px rgba(0, 212, 255, 0.2) !important;
-            z-index: 100 !important;
-            background: #000 !important;
+        /* Режим игры */
+        .playing-mode #eye-cursor { display: block; }
+
+        #tracking-container {
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            width: 140px;
+            height: 105px;
+            border: 2px solid rgba(0, 212, 255, 0.4);
+            border-radius: 12px;
+            overflow: hidden;
+            z-index: 2000;
+            background: #000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            pointer-events: none;
         }
 
         @media (min-width: 768px) {
-            #webgazerVideoContainer {
-                width: 200px !important;
-                height: 150px !important;
-                top: 20px !important;
-                left: 20px !important;
-            }
+            #tracking-container { width: 200px; height: 150px; top: 25px; left: 25px; }
         }
 
-        #webgazerVideoFeed {
-            transform: scaleX(-1);
-        }
+        #tracking-canvas { width: 100%; height: 100%; transform: scaleX(-1); }
+        #webgazerVideoContainer { display: none !important; }
 
-        /* Плавный прицел */
+        /* Нейронный прицел */
         #eye-cursor {
             position: fixed;
-            width: 28px;
-            height: 28px;
-            border: 2px solid #ff3232;
+            width: 30px;
+            height: 30px;
+            border: 2.5px solid var(--red-glow);
             border-radius: 50%;
             pointer-events: none;
-            z-index: 1000;
+            z-index: 3000;
             display: none;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 15px rgba(255, 50, 50, 0.5);
+            box-shadow: 0 0 25px rgba(255, 50, 50, 0.6);
             will-change: left, top;
         }
 
-        @media (min-width: 768px) {
-            #eye-cursor { width: 34px; height: 34px; }
-        }
-
-        #eye-cursor::before {
+        #eye-cursor::after {
             content: '';
             position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 4px;
-            height: 4px;
-            background: #ff3232;
+            top: 50%; left: 50%;
+            width: 6px; height: 6px;
+            background: var(--red-glow);
             border-radius: 50%;
             transform: translate(-50%, -50%);
         }
 
-        /* Мишень */
         .target {
             position: absolute;
-            width: 45px;
-            height: 45px;
-            background: radial-gradient(circle, #ff4d4d 0%, #b30000 70%);
+            width: 46px;
+            height: 46px;
+            background: radial-gradient(circle, #ff4d4d 20%, #800000 100%);
             border: 2px solid rgba(255, 255, 255, 0.9);
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 25px rgba(255, 77, 77, 0.6);
+            box-shadow: 0 0 30px rgba(255, 50, 50, 0.4);
             z-index: 10;
         }
 
-        @media (min-width: 768px) {
-            .target { width: 55px; height: 55px; }
+        .distractor {
+            position: absolute;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 5;
+            opacity: 0.6;
+            will-change: left, top;
         }
 
-        .target.hit {
-            animation: hit-out 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
-        }
-
-        @keyframes hit-out {
+        .target.hit { animation: hit-anim 0.3s ease-out forwards; }
+        @keyframes hit-anim {
             0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-            100% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+            100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
         }
 
-        /* Точки калибровки */
         .calibration-point {
-            width: 30px;
-            height: 30px;
-            background: radial-gradient(circle, #00d4ff 0%, #0077b3 70%);
-            border: 2px solid white;
+            width: 40px;
+            height: 40px;
+            background: var(--cyan-glow);
+            border: 4px solid white;
             border-radius: 50%;
             position: absolute;
             cursor: pointer;
-            z-index: 300; 
+            z-index: 2500;
             transform: translate(-50%, -50%);
-            transition: transform 0.2s;
-            box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+            box-shadow: 0 0 25px var(--cyan-glow);
         }
 
-        @media (min-width: 768px) {
-            .calibration-point { width: 36px; height: 36px; }
-        }
+        .calibration-point.clicked { opacity: 0.1; pointer-events: none; transform: translate(-50%, -50%) scale(0.5); }
 
-        .calibration-point.clicked { background: #00ff88; opacity: 0.1; pointer-events: none; }
-
-        .overlay-bg {
-            position: fixed;
-            inset: 0;
-            background: #050b14;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            z-index: 200;
-            padding: 20px;
-        }
-
-        .hud-panel {
-            background: rgba(0, 20, 40, 0.85);
-            border: 1px solid rgba(0, 212, 255, 0.4);
-            border-radius: 12px;
-            backdrop-filter: blur(10px);
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 16px;
+            backdrop-filter: blur(16px);
         }
 
         .btn-cyber {
-            background: linear-gradient(45deg, #0077b3, #00d4ff);
+            background: linear-gradient(135deg, #0077b3 0%, #00d4ff 100%);
             color: white;
-            padding: 14px 30px;
+            padding: 16px 32px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 2px;
-            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0 100%);
-            transition: all 0.3s;
-            border: none;
+            border-radius: 12px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 8px 20px rgba(0, 212, 255, 0.2);
         }
-        
-        .btn-cyber:active { transform: scale(0.95); }
+        .btn-cyber:hover { transform: translateY(-3px); box-shadow: 0 12px 25px rgba(0, 212, 255, 0.4); }
+
+        .diff-option {
+            border: 2px solid rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.02);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .diff-option.active { border-color: var(--cyan-glow); background: rgba(0, 212, 255, 0.1); }
     </style>
 </head>
-<body>
+<body class="antialiased">
 
     <div id="eye-cursor"></div>
 
+    <div id="tracking-container">
+        <canvas id="tracking-canvas"></canvas>
+    </div>
+
     <!-- Начальный экран -->
-    <div id="setup-screen" class="overlay-bg">
-        <div class="text-center max-w-lg">
-            <h1 class="text-4xl md:text-7xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300" style="text-shadow: 0 0 30px rgba(0,212,255,0.3);">NEURAL AIM</h1>
-            <p class="text-gray-400 mb-8 md:mb-12 tracking-[0.2em] uppercase text-sm md:text-base">Синхронизация взгляда</p>
-            <div class="bg-blue-900/20 p-4 rounded-lg mb-8 border border-blue-500/20 text-left">
-                <p class="text-xs text-blue-300 mb-2 uppercase font-bold">Инструкция:</p>
-                <ul class="text-xs md:text-sm text-gray-300 space-y-2">
-                    <li>• Разрешите доступ к камере</li>
-                    <li>• Держите устройство неподвижно</li>
-                    <li>• Пройдите калибровку (9 точек по 5 кликов)</li>
-                </ul>
+    <div id="setup-screen" class="fixed inset-0 flex items-center justify-center z-[4000] bg-slate-950 p-6">
+        <div class="max-w-xl w-full">
+            <div class="text-center mb-10">
+                <h1 class="text-6xl md:text-8xl font-bold tracking-tighter mb-2 italic uppercase">Neural<span class="text-cyan-400">Aim</span></h1>
+                <p class="text-slate-400 uppercase tracking-widest text-xs">Профессиональный тренажер взгляда</p>
             </div>
-            <button id="start-btn" class="btn-cyber w-full md:w-auto">НАЧАТЬ</button>
+
+            <div class="glass-panel p-6 mb-8">
+                <p class="text-[10px] text-slate-400 mb-4 uppercase font-bold text-center tracking-widest">Конфигурация сложности</p>
+                <div class="flex flex-col gap-3">
+                    <div class="diff-option active p-4 rounded-xl flex justify-between items-center" data-level="easy">
+                        <span class="font-bold tracking-wider">ЛЕГКИЙ</span>
+                        <span class="text-[10px] text-green-400 bg-green-400/10 px-2 py-1 rounded">СТАНДАРТ</span>
+                    </div>
+                    <div class="diff-option p-4 rounded-xl flex justify-between items-center" data-level="medium">
+                        <span class="font-bold tracking-wider">СРЕДНИЙ</span>
+                        <span class="text-[10px] text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded">ПОМЕХИ</span>
+                    </div>
+                    <div class="diff-option p-4 rounded-xl flex justify-between items-center" data-level="hard">
+                        <span class="font-bold tracking-wider">СЛОЖНЫЙ</span>
+                        <span class="text-[10px] text-red-400 bg-red-400/10 px-2 py-1 rounded">ЭКСТРИМ</span>
+                    </div>
+                </div>
+            </div>
+
+            <button id="start-btn" class="btn-cyber w-full">ИНИЦИИРОВАТЬ</button>
         </div>
     </div>
 
     <!-- Экран калибровки -->
     <div id="calibration-screen" class="hidden">
-        <div class="fixed top-4 md:top-10 left-1/2 -translate-x-1/2 hud-panel px-6 py-4 md:px-12 md:py-6 text-center z-[150] w-[90%] md:w-auto">
-            <p class="text-xl md:text-3xl font-bold text-cyan-400 uppercase tracking-widest">Калибровка</p>
-            <p class="text-[10px] md:text-sm text-blue-200 opacity-80">Фокус на точке + 5 нажатий</p>
-            <div class="mt-4 h-1.5 w-full bg-gray-900 rounded-full overflow-hidden border border-blue-900/30">
-                <div id="calibration-progress" class="h-full bg-cyan-400 w-0 transition-all duration-300 shadow-[0_0_10px_#00d4ff]"></div>
+        <div class="fixed top-8 left-1/2 -translate-x-1/2 text-center z-[2000] w-full px-4">
+            <p class="text-cyan-400 font-bold tracking-[0.3em] uppercase text-sm mb-2">Настройка точности</p>
+            <p class="text-xs text-slate-500 mb-4">Смотрите в центр точки и сделайте 5 кликов мышью</p>
+            <div class="h-1.5 w-48 bg-gray-900 mx-auto rounded-full overflow-hidden border border-slate-800">
+                <div id="calibration-progress" class="h-full bg-cyan-400 w-0 transition-all duration-300"></div>
             </div>
         </div>
         <div id="calibration-points"></div>
     </div>
 
-    <!-- Игровой интерфейс -->
-    <div id="game-ui" class="hidden fixed top-4 w-full flex justify-center items-center gap-4 md:gap-10 z-50 pointer-events-none px-4">
-        <div class="hud-panel px-4 py-2 md:px-10 md:py-4 flex flex-col items-center flex-1 md:flex-none md:min-w-[160px]">
-            <span class="text-[9px] md:text-[11px] text-blue-300 uppercase tracking-tighter md:tracking-widest">Цели</span>
-            <span id="score" class="text-2xl md:text-4xl font-bold text-green-400">0</span>
+    <!-- Игровой HUD -->
+    <div id="game-ui" class="hidden fixed top-6 right-6 md:top-10 md:right-10 flex flex-col items-end gap-4 z-[2000] pointer-events-none">
+        <div class="flex gap-4">
+            <div class="glass-panel px-6 py-3 flex flex-col items-end min-w-[100px] md:min-w-[140px]">
+                <span class="text-[10px] text-cyan-400 uppercase font-bold mb-1">Счет</span>
+                <span id="score" class="text-3xl md:text-5xl font-bold leading-none">0</span>
+            </div>
+            <div class="glass-panel px-6 py-3 flex flex-col items-end min-w-[100px] md:min-w-[140px]">
+                <span class="text-[10px] text-slate-400 uppercase font-bold mb-1">Время</span>
+                <span id="timer" class="text-3xl md:text-5xl font-mono leading-none">00:00</span>
+            </div>
         </div>
-        <div class="hud-panel px-4 py-2 md:px-10 md:py-4 flex flex-col items-center flex-1 md:flex-none md:min-w-[160px]">
-            <span class="text-[9px] md:text-[11px] text-blue-300 uppercase tracking-tighter md:tracking-widest">Время</span>
-            <span id="timer" class="text-2xl md:text-4xl font-bold text-white font-mono">00:00</span>
-        </div>
-        <button id="recalibrate-btn" class="pointer-events-auto bg-blue-900/40 p-2 md:px-6 md:py-2 rounded-lg border border-blue-500/20 text-[10px] uppercase backdrop-blur-md">
-            <span class="hidden md:inline">Сброс</span>
-            <span class="md:hidden">↺</span>
-        </button>
+        <button id="recalibrate-btn" class="pointer-events-auto text-[10px] tracking-widest text-cyan-400 border border-cyan-400/30 px-6 py-2 rounded-lg hover:bg-cyan-400/10 transition-all uppercase backdrop-blur-md">Перезапуск</button>
     </div>
 
     <div id="game-canvas" class="w-full h-screen relative hidden"></div>
 
     <script>
         let score = 0;
-        let pointsToClick = 5;
         let isCalibrated = false;
         let activeTarget = null;
-        let startTime = null;
         let timerInterval = null;
-        let totalCalibrationClicks = 0;
-
+        let difficulty = 'easy';
+        
         let gazeX = window.innerWidth / 2;
         let gazeY = window.innerHeight / 2;
         let smoothX = window.innerWidth / 2;
         let smoothY = window.innerHeight / 2;
-        let smoothness = 0.15;
+        const smoothness = 0.16; 
 
-        // Звуковой движок
-        function playHitSound() {
-            try {
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(800, audioCtx.currentTime); 
-                oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.1);
-            } catch (e) {}
-        }
+        let movingDistractors = []; // Только для объектов, которые должны двигаться (Hard mode)
+
+        const distractorColors = ['#22d3ee', '#818cf8', '#f472b6', '#fbbf24', '#c084fc', '#ffffff', '#00ff00'];
+        const hardBGColors = ['#0f172a', '#1e1b4b', '#1e293b', '#450a0a', '#020617', '#171717', '#2d0a45', '#0a452d'];
 
         const setupScreen = document.getElementById('setup-screen');
         const calibrationScreen = document.getElementById('calibration-screen');
         const gameCanvas = document.getElementById('game-canvas');
         const gameUI = document.getElementById('game-ui');
         const eyeCursor = document.getElementById('eye-cursor');
-        const scoreEl = document.getElementById('score');
-        const timerEl = document.getElementById('timer');
-        const progressBar = document.getElementById('calibration-progress');
+        const trackingCanvas = document.getElementById('tracking-canvas');
+        const ctx = trackingCanvas.getContext('2d');
+
+        const faceMesh = new FaceMesh({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
+
+        faceMesh.setOptions({
+            maxNumFaces: 1, refineLandmarks: true,
+            minDetectionConfidence: 0.7, minTrackingConfidence: 0.7
+        });
+
+        const LEFT_EYE = [362, 382, 381, 380, 374, 373, 390, 249, 263, 466, 388, 387, 386, 385, 384, 398];
+        const RIGHT_EYE = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246];
+
+        faceMesh.onResults((results) => {
+            ctx.clearRect(0, 0, trackingCanvas.width, trackingCanvas.height);
+            ctx.globalAlpha = 0.2;
+            ctx.drawImage(results.image, 0, 0, trackingCanvas.width, trackingCanvas.height);
+            ctx.globalAlpha = 1.0;
+            if (results.multiFaceLandmarks) {
+                for (const landmarks of results.multiFaceLandmarks) {
+                    drawEyeContour(landmarks, LEFT_EYE);
+                    drawEyeContour(landmarks, RIGHT_EYE);
+                }
+            }
+        });
+
+        function drawEyeContour(landmarks, indices) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 3;
+            for (let i = 0; i < indices.length; i++) {
+                const pt = landmarks[indices[i]];
+                const x = pt.x * trackingCanvas.width;
+                const y = pt.y * trackingCanvas.height;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.closePath(); ctx.stroke();
+        }
+
+        document.querySelectorAll('.diff-option').forEach(option => {
+            option.onclick = () => {
+                document.querySelectorAll('.diff-option').forEach(o => o.classList.remove('active'));
+                option.classList.add('active');
+                difficulty = option.dataset.level;
+            };
+        });
+
+        async function initCamera() {
+            const videoElement = document.createElement('video');
+            const camera = new Camera(videoElement, {
+                onFrame: async () => { await faceMesh.send({image: videoElement}); },
+                width: 640, height: 480
+            });
+            trackingCanvas.width = 640; trackingCanvas.height = 480;
+            camera.start();
+        }
 
         function animationLoop() {
             if (isCalibrated) {
+                // Прицел
                 smoothX += (gazeX - smoothX) * smoothness;
                 smoothY += (gazeY - smoothY) * smoothness;
                 eyeCursor.style.left = smoothX + 'px';
                 eyeCursor.style.top = smoothY + 'px';
-                checkGazeHit(smoothX, smoothY);
+                
+                // Движение отвлекалок только в Hard моде
+                if (difficulty === 'hard' && movingDistractors.length > 0) {
+                    movingDistractors.forEach(d => {
+                        d.x += d.vx;
+                        d.y += d.vy;
+                        if (d.x <= 20 || d.x >= window.innerWidth - 20) d.vx *= -1;
+                        if (d.y <= 20 || d.y >= window.innerHeight - 20) d.vy *= -1;
+                        d.el.style.left = d.x + 'px';
+                        d.el.style.top = d.y + 'px';
+                    });
+                }
+                checkHit(smoothX, smoothY);
             }
             requestAnimationFrame(animationLoop);
         }
         animationLoop();
 
-        async function initWebGazer() {
-            try {
-                await webgazer.setRegression('ridge')
-                    .setTracker('TKM')
-                    .setGazeListener((data) => {
-                        if (data) { gazeX = data.x; gazeY = data.y; }
-                    })
-                    .begin();
-                webgazer.showVideoPreview(true).showPredictionPoints(false).applyKalmanFilter(true);
-            } catch (err) { console.error(err); }
-        }
-
-        document.getElementById('start-btn').addEventListener('click', async () => {
-            setupScreen.classList.add('hidden');
+        document.getElementById('start-btn').onclick = async () => {
+            setupScreen.style.display = 'none';
             calibrationScreen.classList.remove('hidden');
+            await initCamera();
             await initWebGazer();
             createCalibrationPoints();
-        });
+        };
+
+        async function initWebGazer() {
+            await webgazer.setRegression('ridge')
+                .setGazeListener((data) => {
+                    if (data && isCalibrated) { 
+                        gazeX = data.x; 
+                        gazeY = data.y; 
+                    }
+                })
+                .begin();
+            webgazer.showVideoPreview(false).showPredictionPoints(false).applyKalmanFilter(true);
+        }
 
         function createCalibrationPoints() {
             const container = document.getElementById('calibration-points');
-            const positions = [
-                {t: '20%', l: '20%'}, {t: '20%', l: '50%'}, {t: '20%', l: '80%'},
-                {t: '50%', l: '20%'}, {t: '50%', l: '50%'}, {t: '50%', l: '80%'},
-                {t: '80%', l: '20%'}, {t: '80%', l: '50%'}, {t: '80%', l: '80%'}
+            container.innerHTML = '';
+            const points = [
+                {x: 0.1, y: 0.15}, {x: 0.5, y: 0.1}, {x: 0.9, y: 0.15},
+                {x: 0.1, y: 0.5}, {x: 0.5, y: 0.5}, {x: 0.9, y: 0.5},
+                {x: 0.1, y: 0.85}, {x: 0.5, y: 0.9}, {x: 0.9, y: 0.85}
             ];
-            positions.forEach((pos) => {
+            let totalClicks = 0;
+            const clicksRequired = 5;
+            const progressBar = document.getElementById('calibration-progress');
+
+            points.forEach(pos => {
                 const pt = document.createElement('div');
                 pt.className = 'calibration-point';
-                pt.style.top = pos.t; pt.style.left = pos.l;
-                pt.dataset.clicks = 0;
-                pt.addEventListener('click', () => {
-                    let clicks = parseInt(pt.dataset.clicks) + 1;
-                    pt.dataset.clicks = clicks;
-                    totalCalibrationClicks++;
-                    updateCalibrationProgress();
-                    if (clicks >= pointsToClick) {
+                let px = pos.x * window.innerWidth;
+                let py = pos.y * window.innerHeight;
+                if (px < 260 && py < 210) { px += 100; py += 100; }
+                pt.style.left = px + 'px'; pt.style.top = py + 'px';
+                let count = 0;
+                pt.onmousedown = (e) => {
+                    count++; totalClicks++;
+                    if (progressBar) progressBar.style.width = `${(totalClicks / (points.length * clicksRequired)) * 100}%`;
+                    if (count >= clicksRequired) {
                         pt.classList.add('clicked');
-                        checkCalibrationDone();
+                        if (document.querySelectorAll('.calibration-point:not(.clicked)').length === 0) {
+                            setTimeout(finishCalibration, 600);
+                        }
                     }
-                });
+                };
                 container.appendChild(pt);
             });
         }
 
-        function updateCalibrationProgress() {
-            const progress = (totalCalibrationClicks / (9 * pointsToClick)) * 100;
-            progressBar.style.width = `${progress}%`;
+        function finishCalibration() {
+            isCalibrated = true;
+            webgazer.removeMouseEventListeners(); 
+            calibrationScreen.classList.add('hidden');
+            gameCanvas.classList.remove('hidden');
+            gameUI.classList.remove('hidden');
+            document.body.classList.add('playing-mode');
+            startGame();
         }
 
-        function checkCalibrationDone() {
-            if (document.querySelectorAll('.calibration-point:not(.clicked)').length === 0) {
-                isCalibrated = true;
-                calibrationScreen.classList.add('hidden');
-                gameCanvas.classList.remove('hidden');
-                gameUI.classList.remove('hidden');
-                eyeCursor.style.display = 'block';
-                startLevel();
-            }
-        }
-
-        function spawnTarget() {
-            if (activeTarget) activeTarget.remove();
-            const target = document.createElement('div');
-            target.className = 'target';
-            // Безопасные отступы для разных экранов
-            const margin = window.innerWidth < 768 ? 60 : 120;
-            const x = Math.random() * (window.innerWidth - margin * 2) + margin;
-            const y = Math.random() * (window.innerHeight - margin * 2) + margin;
-            target.style.left = x + 'px';
-            target.style.top = y + 'px';
-            gameCanvas.appendChild(target);
-            activeTarget = target;
-        }
-
-        function hitTarget() {
-            if (!activeTarget || activeTarget.classList.contains('hit')) return;
-            const current = activeTarget;
-            current.classList.add('hit');
-            activeTarget = null;
-            score++;
-            scoreEl.innerText = score;
-            playHitSound();
-            setTimeout(() => { current.remove(); spawnTarget(); }, 200);
-        }
-
-        function checkGazeHit(sx, sy) {
-            if (!activeTarget) return;
-            const rect = activeTarget.getBoundingClientRect();
-            const tx = rect.left + rect.width / 2;
-            const ty = rect.top + rect.height / 2;
-            const dist = Math.sqrt(Math.pow(sx - tx, 2) + Math.pow(sy - ty, 2));
-            // Увеличиваем хитбокс на мобилках для удобства
-            const threshold = window.innerWidth < 768 ? 55 : 48;
-            if (dist < threshold) hitTarget();
-        }
-
-        function startTimer() {
-            startTime = Date.now();
-            timerInterval = setInterval(() => {
-                const delta = Math.floor((Date.now() - startTime) / 1000);
-                timerEl.innerText = `${Math.floor(delta/60).toString().padStart(2,'0')}:${(delta%60).toString().padStart(2,'0')}`;
-            }, 1000);
-        }
-
-        function startLevel() {
-            score = 0; scoreEl.innerText = '0';
-            if (timerInterval) clearInterval(timerInterval);
+        function startGame() {
+            score = 0;
+            document.getElementById('score').innerText = '0';
             startTimer();
             spawnTarget();
         }
 
-        document.getElementById('recalibrate-btn').addEventListener('click', () => {
-            isCalibrated = false;
-            webgazer.clearData();
-            gameCanvas.classList.add('hidden');
-            gameUI.classList.add('hidden');
-            eyeCursor.style.display = 'none';
-            calibrationScreen.classList.remove('hidden');
-            document.getElementById('calibration-points').innerHTML = '';
-            totalCalibrationClicks = 0;
-            progressBar.style.width = '0%';
-            createCalibrationPoints();
-        });
+        function startTimer() {
+            let sec = 0;
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                sec++;
+                let m = Math.floor(sec/60).toString().padStart(2,'0');
+                let s = (sec%60).toString().padStart(2,'0');
+                document.getElementById('timer').innerText = `${m}:${s}`;
+            }, 1000);
+        }
 
-        window.onresize = () => {
-            if (isCalibrated) spawnTarget();
-        };
+        function spawnTarget() {
+            gameCanvas.innerHTML = '';
+            movingDistractors = []; 
+            
+            const target = document.createElement('div');
+            target.className = 'target';
+            let x, y, attempts = 0;
+            const trackW = 260, hudW = 400;
+            
+            do {
+                x = Math.random() * (window.innerWidth - 120) + 60;
+                y = Math.random() * (window.innerHeight - 120) + 60;
+                attempts++;
+                var inTrack = (x < trackW && y < 220);
+                var inHUD = (x > window.innerWidth - hudW && y < 250);
+            } while ((inTrack || inHUD) && attempts < 50);
+            
+            target.style.left = x + 'px'; target.style.top = y + 'px';
+            gameCanvas.appendChild(target);
+            activeTarget = target;
+
+            // Логика создания отвлекалок
+            if (difficulty !== 'easy') {
+                const count = Math.floor(Math.random() * 8) + 8; // От 8 до 15 штук
+                for (let i = 0; i < count; i++) {
+                    const d = document.createElement('div');
+                    d.className = 'distractor';
+                    const dx = Math.random() * (window.innerWidth - 100) + 50;
+                    const dy = Math.random() * (window.innerHeight - 100) + 50;
+                    d.style.left = dx + 'px';
+                    d.style.top = dy + 'px';
+                    d.style.background = distractorColors[Math.floor(Math.random() * distractorColors.length)];
+                    gameCanvas.appendChild(d);
+
+                    // В сложном режиме добавляем параметры движения
+                    if (difficulty === 'hard') {
+                        movingDistractors.push({
+                            el: d,
+                            x: dx,
+                            y: dy,
+                            vx: (Math.random() - 0.5) * 3, 
+                            vy: (Math.random() - 0.5) * 3
+                        });
+                    }
+                }
+            }
+        }
+
+        function checkHit(sx, sy) {
+            if (!activeTarget || activeTarget.classList.contains('hit')) return;
+            const rect = activeTarget.getBoundingClientRect();
+            const tx = rect.left + rect.width / 2;
+            const ty = rect.top + rect.height / 2;
+            const dist = Math.sqrt((sx - tx)**2 + (sy - ty)**2);
+            const threshold = window.innerWidth < 768 ? 48 : 42;
+            
+            if (dist < threshold) {
+                activeTarget.classList.add('hit');
+                score++;
+                document.getElementById('score').innerText = score;
+                
+                if (difficulty === 'hard') {
+                    const color = hardBGColors[Math.floor(Math.random() * hardBGColors.length)];
+                    document.body.style.backgroundImage = 'none';
+                    document.body.style.backgroundColor = color;
+                }
+                
+                setTimeout(spawnTarget, 250);
+            }
+        }
+
+        document.getElementById('recalibrate-btn').onclick = () => location.reload();
+        window.onresize = () => { if(isCalibrated) spawnTarget(); };
     </script>
 </body>
 </html>
